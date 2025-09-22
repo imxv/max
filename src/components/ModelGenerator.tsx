@@ -2,13 +2,16 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
   ssr: false,
   loading: () => (
-    <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-      <div className="text-center text-gray-500">
+    <div className="h-96 bg-muted rounded-lg flex items-center justify-center">
+      <div className="text-center text-muted-foreground">
         <div className="text-4xl mb-2">🔄</div>
         <p>Loading 3D viewer...</p>
       </div>
@@ -139,77 +142,91 @@ export default function ModelGenerator() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {/* Input Section */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4">Generate 3D Model</h2>
-
-        <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Generate 3D Model</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div>
-            <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="prompt" className="block text-sm font-medium text-foreground mb-2">
               Describe your 3D model:
             </label>
-            <textarea
+            <Textarea
               id="prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="e.g., A red sports car, A medieval castle, A cute robot..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="resize-none"
               rows={4}
               maxLength={600}
               disabled={isGenerating}
             />
-            <div className="text-sm text-gray-500 mt-1">
+            <div className="text-sm text-muted-foreground mt-1">
               {prompt.length}/600 characters
             </div>
           </div>
 
-          <button
+          <Button
             onClick={generateModel}
             disabled={isGenerating || !prompt.trim()}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="w-full"
+            size="lg"
           >
             {isGenerating ? 'Generating...' : 'Generate 3D Model'}
-          </button>
+          </Button>
 
           {isGenerating && (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <span className="text-blue-800">{currentStage}</span>
-              </div>
-            </div>
+            <Card className="bg-muted/20">
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span className="text-foreground">{currentStage}</span>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {currentStage && !isGenerating && (
-            <div className="bg-green-50 p-4 rounded-lg">
-              <span className="text-green-800">{currentStage}</span>
-            </div>
+            <Card className="bg-muted/20">
+              <CardContent className="p-4">
+                <span className="text-foreground">{currentStage}</span>
+              </CardContent>
+            </Card>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* 3D Viewer Section */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-4">3D Model Preview</h2>
-
-        <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-          <ModelViewer modelUrl={modelUrl} />
-        </div>
-
-        {modelUrl && (
-          <div className="mt-4 space-y-2">
-            <p className="text-sm text-gray-600">
-              Use mouse to rotate and zoom the 3D model
-            </p>
-            <a
-              href={modelUrl.includes('meshy.ai') ? `/api/proxy-model?url=${encodeURIComponent(modelUrl)}` : modelUrl}
-              download="model.glb"
-              className="inline-block bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Download GLB Model
-            </a>
+      <Card>
+        <CardHeader>
+          <CardTitle>3D Model Preview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-96 bg-muted rounded-lg flex items-center justify-center">
+            <ModelViewer modelUrl={modelUrl} />
           </div>
-        )}
-      </div>
+
+          {modelUrl && (
+            <div className="mt-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Use mouse to rotate and zoom the 3D model
+              </p>
+              <Button
+                asChild
+                variant="outline"
+                className="w-full"
+              >
+                <a
+                  href={modelUrl.includes('meshy.ai') ? `/api/proxy-model?url=${encodeURIComponent(modelUrl)}` : modelUrl}
+                  download="model.glb"
+                >
+                  Download GLB Model
+                </a>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

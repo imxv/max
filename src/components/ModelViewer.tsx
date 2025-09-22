@@ -56,8 +56,8 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
 
   if (!modelUrl) {
     return (
-      <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-        <div className="text-center text-gray-500">
+      <div className="h-96 bg-muted rounded-lg flex items-center justify-center">
+        <div className="text-center text-muted-foreground">
           <div className="text-4xl mb-2">🎯</div>
           <p>Your 3D model will appear here</p>
         </div>
@@ -68,7 +68,7 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
   return (
     <div
       ref={containerRef}
-      className="h-96 bg-gray-100 rounded-lg"
+      className="h-96 bg-muted rounded-lg"
       style={{ width: '100%', height: '100%' }}
     />
   );
