@@ -47,6 +47,11 @@ export default function ModelViewer({ modelUrl }: ModelViewerProps) {
           alt="Generated 3D model"
           auto-rotate
           camera-controls
+          touch-action="pan-y"
+          disable-pan
+          min-field-of-view="45deg"
+          max-field-of-view="60deg"
+          camera-orbit="0deg 75deg 200%"
           style="width: 100%; height: 100%;"
           class="rounded-lg">
         </model-viewer>

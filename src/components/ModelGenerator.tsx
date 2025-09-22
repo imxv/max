@@ -269,7 +269,7 @@ export default function ModelGenerator() {
           {(selectedModel || modelUrl) && (
             <div className="mt-4">
               <p className="text-sm text-muted-foreground text-center">
-                Use mouse to rotate and zoom the 3D model
+                Use mouse to rotate, scroll to zoom, and drag to adjust the 3D model
               </p>
             </div>
           )}
