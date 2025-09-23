@@ -197,55 +197,21 @@ export default function ModelGenerator() {
               className="w-full"
               size="lg"
             >
-              {isGenerating ? 'Generating...' : 'Generate 3D Model'}
+              <div className="flex items-center space-x-2">
+                {isGenerating && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                )}
+                <span>
+                  {isGenerating
+                    ? (currentStage || 'Generating...')
+                    : 'Generate 3D Model'
+                  }
+                </span>
+              </div>
             </Button>
-
-            {isGenerating && (
-              <Card className="bg-muted/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                    <span className="text-foreground text-sm">{currentStage}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {currentStage && !isGenerating && (
-              <Card className="bg-muted/20">
-                <CardContent className="p-4">
-                  <span className="text-foreground text-sm">{currentStage}</span>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
 
-        {/* Model Controls */}
-        <div className="p-4">
-          <h3 className="text-md font-medium text-foreground mb-3">
-            Model Controls
-          </h3>
-          {selectedModel && (
-            <div className="space-y-2">
-              <Button
-                asChild
-                variant="outline"
-                className="w-full"
-                size="sm"
-              >
-                <a
-                  href={selectedModel.modelUrl.includes('meshy.ai') ?
-                    `/api/proxy-model?url=${encodeURIComponent(selectedModel.modelUrl)}` :
-                    selectedModel.modelUrl}
-                  download="model.glb"
-                >
-                  Download GLB Model
-                </a>
-              </Button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Center Panel - 3D Viewer */}
@@ -262,17 +228,37 @@ export default function ModelGenerator() {
         </div>
 
         <div className="flex-1 p-4">
-          <div className="h-full bg-background rounded-lg border border-border flex items-center justify-center">
+          <div className="h-full bg-background rounded-lg border border-border flex items-center justify-center relative">
             <ModelViewer modelUrl={selectedModel?.modelUrl || modelUrl} />
-          </div>
 
-          {(selectedModel || modelUrl) && (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Use mouse to rotate, scroll to zoom, and drag to adjust the 3D model
-              </p>
-            </div>
-          )}
+            {/* Instruction text - Positioned at bottom left-center */}
+            {(selectedModel || modelUrl) && (
+              <div className="absolute bottom-4 left-4">
+                <p className="text-xs text-muted-foreground whitespace-nowrap bg-background/90 backdrop-blur-sm px-3 py-1 rounded-md shadow-sm border border-border">
+                  Use mouse to rotate, scroll to zoom, and drag to adjust the 3D model
+                </p>
+              </div>
+            )}
+
+            {/* Download Button - Positioned at bottom right */}
+            {selectedModel && (
+              <Button
+                asChild
+                variant="outline"
+                className="absolute bottom-4 right-4 shadow-lg bg-background/90 backdrop-blur-sm hover:bg-background"
+                size="sm"
+              >
+                <a
+                  href={selectedModel.modelUrl.includes('meshy.ai') ?
+                    `/api/proxy-model?url=${encodeURIComponent(selectedModel.modelUrl)}` :
+                    selectedModel.modelUrl}
+                  download="model.glb"
+                >
+                  Download GLB Model
+                </a>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
