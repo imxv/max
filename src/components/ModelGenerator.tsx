@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,9 @@ interface GeneratedModel {
   modelUrl: string;
   createdAt: Date;
   thumbnailUrl?: string;
+  previewTaskId?: string; // For refinement
+  stage?: 'preview' | 'refined';
+  taskType?: 'text-to-3d' | 'image-to-3d'; // Track task type for API calls
 }
 
 export default function ModelGenerator() {
@@ -56,15 +59,91 @@ export default function ModelGenerator() {
   const [modelHistory, setModelHistory] = useState<GeneratedModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<GeneratedModel | null>(null);
 
-  const pollTaskStatus = async (taskId: string): Promise<TaskStatus> => {
+  // New refinement-related state
+  const [generationStage, setGenerationStage] = useState<'preview' | 'refine'>('preview');
+  const [texturePrompt, setTexturePrompt] = useState('');
+  const [enablePbr, setEnablePbr] = useState(true);
+
+  // Image upload state
+  const [previewImage, setPreviewImage] = useState<string>('');
+  const [previewImageFile, setPreviewImageFile] = useState<File | null>(null);
+  const [refineImage, setRefineImage] = useState<string>('');
+  const [refineImageFile, setRefineImageFile] = useState<File | null>(null);
+
+  // Generation method state
+  const [generationMethod, setGenerationMethod] = useState<'text' | 'image'>('text');
+
+  // Auto-switch to preview mode if refinement is selected but no valid preview model
+  useEffect(() => {
+    if (generationStage === 'refine' && !selectedModel?.previewTaskId) {
+      setGenerationStage('preview');
+    }
+  }, [generationStage, selectedModel]);
+
+  // Convert image to base64
+  const convertImageToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        if (reader.result) {
+          resolve(reader.result as string);
+        } else {
+          reject(new Error('Failed to read file'));
+        }
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // Handle image upload for preview
+  const handlePreviewImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      try {
+        const base64 = await convertImageToBase64(file);
+        setPreviewImageFile(file);
+        setPreviewImage(base64);
+      } catch (error) {
+        console.error('Error converting image to base64:', error);
+      }
+    }
+  };
+
+  // Handle image upload for refinement
+  const handleRefineImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      try {
+        const base64 = await convertImageToBase64(file);
+        setRefineImageFile(file);
+        setRefineImage(base64);
+      } catch (error) {
+        console.error('Error converting image to base64:', error);
+      }
+    }
+  };
+
+  // Remove uploaded image
+  const removePreviewImage = () => {
+    setPreviewImage('');
+    setPreviewImageFile(null);
+  };
+
+  const removeRefineImage = () => {
+    setRefineImage('');
+    setRefineImageFile(null);
+  };
+
+  const pollTaskStatus = async (taskId: string, taskType: 'text-to-3d' | 'image-to-3d' = 'text-to-3d'): Promise<TaskStatus> => {
     return new Promise((resolve, reject) => {
       let retryCount = 0;
       const maxRetries = 20; // Maximum 20 retries (about 1 minute)
 
       const poll = async () => {
         try {
-          console.log('Polling status for task:', taskId);
-          const response = await fetch(`/api/generate?taskId=${taskId}`);
+          console.log('Polling status for task:', taskId, 'type:', taskType);
+          const response = await fetch(`/api/generate?taskId=${taskId}&taskType=${taskType}`);
 
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -97,60 +176,173 @@ export default function ModelGenerator() {
   };
 
   const generateModel = async () => {
-    if (!prompt.trim()) return;
+    if (generationStage === 'preview' && generationMethod === 'text' && !prompt.trim()) return;
+    if (generationStage === 'preview' && generationMethod === 'image' && !previewImage) return;
+    if (generationStage === 'refine' && !selectedModel?.previewTaskId) return;
 
     setIsGenerating(true);
-    setCurrentStage('Creating preview...');
     setModelUrl('');
 
     try {
-      // Step 1: Create preview
-      const previewResponse = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, mode: 'preview' }),
-      });
+      if (generationStage === 'preview') {
+        // Step 1: Create preview
+        setCurrentStage('Creating preview...');
 
-      if (!previewResponse.ok) {
-        throw new Error('Failed to create preview task');
-      }
+        const requestBody: {
+          prompt?: string;
+          mode: string;
+          image_url?: string;
+          enablePbr?: boolean;
+        } = {
+          mode: 'preview'
+        };
 
-      const previewData = await previewResponse.json();
-      console.log('Preview API response:', previewData);
-      setCurrentStage('Generating preview mesh...');
+        // Determine task type and set parameters
+        const currentTaskType: 'text-to-3d' | 'image-to-3d' = generationMethod === 'image' ? 'image-to-3d' : 'text-to-3d';
 
-      // Check different possible field names for task ID
-      const taskId = previewData.result || previewData.id || previewData.task_id || previewData.taskId;
+        // Add prompt or image based on generation method
+        if (generationMethod === 'image' && previewImage) {
+          requestBody.image_url = previewImage;
+          // For preview stage with image upload, we want white model (no texture)
+          // Don't send enablePbr since should_texture will be false on backend
+        } else if (generationMethod === 'text' && prompt.trim()) {
+          requestBody.prompt = prompt;
+        }
 
-      if (!taskId) {
-        console.error('No task ID found in response:', previewData);
-        throw new Error(`No task ID returned from preview API. Response: ${JSON.stringify(previewData)}`);
-      }
+        const previewResponse = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
 
-      // Poll preview status
-      const completedPreview = await pollTaskStatus(taskId);
+        if (!previewResponse.ok) {
+          throw new Error('Failed to create preview task');
+        }
 
-      if (completedPreview.status === 'FAILED') {
-        throw new Error('Preview generation failed');
-      }
+        const previewData = await previewResponse.json();
+        console.log('Preview API response:', previewData);
+        setCurrentStage('Generating preview mesh...');
 
-      // Use preview model directly
-      if (completedPreview.status === 'SUCCEEDED') {
-        const modelUrl = completedPreview.model_urls?.glb || completedPreview.result?.model_urls?.glb;
-        if (modelUrl) {
-          setModelUrl(modelUrl);
-          setCurrentStage('Preview model ready!');
+        // Check different possible field names for task ID
+        const taskId = previewData.result || previewData.id || previewData.task_id || previewData.taskId;
 
-          // Add to history
-          const newModel: GeneratedModel = {
-            id: taskId,
-            prompt: prompt,
-            modelUrl: modelUrl,
-            createdAt: new Date(),
-            thumbnailUrl: completedPreview.thumbnail_url || completedPreview.result?.thumbnail_url
-          };
-          setModelHistory(prev => [newModel, ...prev]);
-          setSelectedModel(newModel);
+        if (!taskId) {
+          console.error('No task ID found in response:', previewData);
+          throw new Error(`No task ID returned from preview API. Response: ${JSON.stringify(previewData)}`);
+        }
+
+        // Poll preview status with correct task type
+        const completedPreview = await pollTaskStatus(taskId, currentTaskType);
+
+        if (completedPreview.status === 'FAILED') {
+          throw new Error('Preview generation failed');
+        }
+
+        // Use preview model directly
+        if (completedPreview.status === 'SUCCEEDED') {
+          const modelUrl = completedPreview.model_urls?.glb || completedPreview.result?.model_urls?.glb;
+          if (modelUrl) {
+            setModelUrl(modelUrl);
+            setCurrentStage('Preview model ready!');
+
+            // Add to history
+            const newModel: GeneratedModel = {
+              id: taskId,
+              prompt: generationMethod === 'image' ? 'Generated from uploaded image' : prompt,
+              modelUrl: modelUrl,
+              createdAt: new Date(),
+              thumbnailUrl: completedPreview.thumbnail_url || completedPreview.result?.thumbnail_url,
+              previewTaskId: taskId,
+              stage: 'preview',
+              taskType: currentTaskType
+            };
+            setModelHistory(prev => [newModel, ...prev]);
+            setSelectedModel(newModel);
+
+            // Clear input after successful preview generation
+            if (generationMethod === 'text') {
+              setPrompt('');
+            } else {
+              setPreviewImage('');
+              setPreviewImageFile(null);
+            }
+          }
+        }
+
+      } else if (generationStage === 'refine') {
+        // Refinement mode
+        setCurrentStage('Creating refinement task...');
+
+        const requestBody: {
+          mode: string;
+          previewTaskId: string;
+          enablePbr: boolean;
+          texturePrompt?: string;
+          image_url?: string;
+        } = {
+          mode: 'refine',
+          previewTaskId: selectedModel?.previewTaskId || '',
+          enablePbr: enablePbr
+        };
+
+        if (texturePrompt.trim()) {
+          requestBody.texturePrompt = texturePrompt.trim();
+        }
+
+        if (refineImage) {
+          requestBody.image_url = refineImage;
+        }
+
+        const refineResponse = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!refineResponse.ok) {
+          throw new Error('Failed to create refinement task');
+        }
+
+        const refineData = await refineResponse.json();
+        console.log('Refinement API response:', refineData);
+        setCurrentStage('Generating refined model with textures...');
+
+        // Check different possible field names for task ID
+        const refineTaskId = refineData.result || refineData.id || refineData.task_id || refineData.taskId;
+
+        if (!refineTaskId) {
+          console.error('No refinement task ID found in response:', refineData);
+          throw new Error(`No task ID returned from refinement API. Response: ${JSON.stringify(refineData)}`);
+        }
+
+        // Poll refinement status (refinement is always text-to-3d)
+        const completedRefinement = await pollTaskStatus(refineTaskId, 'text-to-3d');
+
+        if (completedRefinement.status === 'FAILED') {
+          throw new Error('Refinement generation failed');
+        }
+
+        // Use refined model
+        if (completedRefinement.status === 'SUCCEEDED') {
+          const modelUrl = completedRefinement.model_urls?.glb || completedRefinement.result?.model_urls?.glb;
+          if (modelUrl) {
+            setModelUrl(modelUrl);
+            setCurrentStage('Refined model ready!');
+
+            // Add refined model to history
+            const refinedModel: GeneratedModel = {
+              id: refineTaskId,
+              prompt: `${selectedModel?.prompt || ''}${texturePrompt ? ` (${texturePrompt})` : ''}`,
+              modelUrl: modelUrl,
+              createdAt: new Date(),
+              thumbnailUrl: completedRefinement.thumbnail_url || completedRefinement.result?.thumbnail_url,
+              previewTaskId: selectedModel?.previewTaskId || '',
+              stage: 'refined',
+              taskType: 'text-to-3d' // Refinement is always text-to-3d
+            };
+            setModelHistory(prev => [refinedModel, ...prev]);
+            setSelectedModel(refinedModel);
+          }
         }
       }
 
@@ -172,28 +364,277 @@ export default function ModelGenerator() {
           </h2>
 
           <div className="space-y-4">
+            {/* Stage Selection */}
             <div>
-              <label htmlFor="prompt" className="block text-sm font-medium text-foreground mb-2">
-                Describe your 3D model:
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Generation Stage:
               </label>
-              <Textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g., A red sports car, A medieval castle, A cute robot..."
-                className="resize-none"
-                rows={4}
-                maxLength={600}
-                disabled={isGenerating}
-              />
-              <div className="text-sm text-muted-foreground mt-1">
-                {prompt.length}/600 characters
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setGenerationStage('preview')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                    generationStage === 'preview'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-foreground hover:bg-muted'
+                  }`}
+                  disabled={isGenerating}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenerationStage('refine')}
+                  className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                    generationStage === 'refine'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-foreground hover:bg-muted'
+                  }`}
+                  disabled={isGenerating || !selectedModel?.previewTaskId}
+                >
+                  Refinement
+                </button>
               </div>
+              {generationStage === 'refine' && !selectedModel?.previewTaskId && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Select a preview model to enable refinement
+                </p>
+              )}
             </div>
+
+            {/* Preview Mode Fields */}
+            {generationStage === 'preview' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Generation Method:
+                  </label>
+                  <div className="flex rounded-lg border border-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenerationMethod('text');
+                        setPreviewImage('');
+                        setPreviewImageFile(null);
+                      }}
+                      className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                        generationMethod === 'text'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background text-foreground hover:bg-muted'
+                      }`}
+                      disabled={isGenerating}
+                    >
+                      Text Prompt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenerationMethod('image');
+                        setPrompt('');
+                      }}
+                      className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                        generationMethod === 'image'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background text-foreground hover:bg-muted'
+                      }`}
+                      disabled={isGenerating}
+                    >
+                      Image Upload
+                    </button>
+                  </div>
+                </div>
+
+                {generationMethod === 'text' && (
+                  <div>
+                    <label htmlFor="prompt" className="block text-sm font-medium text-foreground mb-2">
+                      Describe your 3D model:
+                    </label>
+                    <Textarea
+                      id="prompt"
+                      value={prompt}
+                      onChange={(e) => setPrompt(e.target.value)}
+                      placeholder="e.g., A red sports car, A medieval castle, A cute robot..."
+                      className="resize-none"
+                      rows={4}
+                      maxLength={600}
+                      disabled={isGenerating}
+                    />
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {prompt.length}/600 characters
+                    </div>
+                  </div>
+                )}
+
+                {generationMethod === 'image' && previewImage && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Uploaded Image:
+                    </label>
+                    <div className="space-y-2">
+                      <div className="relative w-full h-48 border-2 border-dashed border-border rounded-lg overflow-hidden">
+                        <Image
+                          src={previewImage}
+                          alt="Preview upload"
+                          fill
+                          className="object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={removePreviewImage}
+                          className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-destructive/90"
+                          disabled={isGenerating}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {previewImageFile && (
+                        <p className="text-xs text-muted-foreground">
+                          {previewImageFile.name} ({(previewImageFile.size / 1024 / 1024).toFixed(1)} MB)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {generationMethod === 'image' && !previewImage && (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Upload an image to convert to 3D:
+                    </label>
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePreviewImageUpload}
+                        className="hidden"
+                        id="preview-image-upload"
+                        disabled={isGenerating}
+                      />
+                      <label
+                        htmlFor="preview-image-upload"
+                        className="cursor-pointer flex flex-col items-center space-y-3"
+                      >
+                        <div className="text-4xl">📸</div>
+                        <p className="text-sm font-medium text-foreground">
+                          Click to upload an image
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, JPEG (Max 10MB)
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Refinement Mode Fields */}
+            {generationStage === 'refine' && selectedModel?.previewTaskId && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Selected Preview Model:
+                  </label>
+                  <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                    {selectedModel.prompt}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="texturePrompt" className="block text-sm font-medium text-foreground mb-2">
+                    Texture Description (Optional):
+                  </label>
+                  <Textarea
+                    id="texturePrompt"
+                    value={texturePrompt}
+                    onChange={(e) => setTexturePrompt(e.target.value)}
+                    placeholder="e.g., Metallic surface, Wood grain, Glossy paint..."
+                    className="resize-none"
+                    rows={3}
+                    maxLength={300}
+                    disabled={isGenerating}
+                  />
+                  <div className="text-sm text-muted-foreground mt-1">
+                    {texturePrompt.length}/300 characters
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Reference Image (Optional):
+                  </label>
+                  {!refineImage ? (
+                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleRefineImageUpload}
+                        className="hidden"
+                        id="refine-image-upload"
+                        disabled={isGenerating}
+                      />
+                      <label
+                        htmlFor="refine-image-upload"
+                        className="cursor-pointer flex flex-col items-center space-y-2"
+                      >
+                        <div className="text-2xl">🎨</div>
+                        <p className="text-sm text-muted-foreground">
+                          Upload reference image for texture
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, JPEG (Max 10MB)
+                        </p>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="relative w-full h-32 border-2 border-dashed border-border rounded-lg overflow-hidden">
+                        <Image
+                          src={refineImage}
+                          alt="Refine reference"
+                          fill
+                          className="object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeRefineImage}
+                          className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-destructive/90"
+                          disabled={isGenerating}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {refineImageFile && (
+                        <p className="text-sm text-muted-foreground">
+                          {refineImageFile.name} ({(refineImageFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="enablePbr"
+                    checked={enablePbr}
+                    onChange={(e) => setEnablePbr(e.target.checked)}
+                    disabled={isGenerating}
+                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                  />
+                  <label htmlFor="enablePbr" className="text-sm text-foreground">
+                    Enable PBR Maps (metallic, roughness, normal)
+                  </label>
+                </div>
+              </div>
+            )}
 
             <Button
               onClick={generateModel}
-              disabled={isGenerating || !prompt.trim()}
+              disabled={isGenerating ||
+                (generationStage === 'preview' && generationMethod === 'text' && !prompt.trim()) ||
+                (generationStage === 'preview' && generationMethod === 'image' && !previewImage) ||
+                (generationStage === 'refine' && !selectedModel?.previewTaskId)}
               className="w-full"
               size="lg"
             >
@@ -204,7 +645,9 @@ export default function ModelGenerator() {
                 <span>
                   {isGenerating
                     ? (currentStage || 'Generating...')
-                    : 'Generate 3D Model'
+                    : generationStage === 'preview'
+                      ? 'Generate Preview Model'
+                      : 'Generate Refined Model'
                   }
                 </span>
               </div>
@@ -295,7 +738,7 @@ export default function ModelGenerator() {
                 >
                   <CardContent className="p-3">
                     <div className="flex items-start space-x-3">
-                      <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 flex items-center justify-center">
+                      <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 flex items-center justify-center relative">
                         {model.thumbnailUrl ? (
                           <Image
                             src={model.thumbnailUrl}
@@ -307,14 +750,29 @@ export default function ModelGenerator() {
                         ) : (
                           <div className="text-xl">🎯</div>
                         )}
+                        {/* Stage badge */}
+                        <div className={`absolute -top-1 -right-1 px-1 py-0.5 text-xs rounded-full text-white ${
+                          model.stage === 'refined' ? 'bg-green-500' : 'bg-blue-500'
+                        }`}>
+                          {model.stage === 'refined' ? 'R' : 'P'}
+                        </div>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground line-clamp-2">
                           {model.prompt}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {model.createdAt.toLocaleString()}
-                        </p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-xs text-muted-foreground">
+                            {model.createdAt.toLocaleString()}
+                          </p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            model.stage === 'refined'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                          }`}>
+                            {model.stage === 'refined' ? 'Refined' : 'Preview'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
