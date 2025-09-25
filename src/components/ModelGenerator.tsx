@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
@@ -501,28 +502,47 @@ export default function ModelGenerator() {
                     <label className="block text-sm font-medium text-foreground mb-2">
                       Upload an image to convert to 3D:
                     </label>
-                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePreviewImageUpload}
-                        className="hidden"
-                        id="preview-image-upload"
-                        disabled={isGenerating}
-                      />
-                      <label
-                        htmlFor="preview-image-upload"
-                        className="cursor-pointer flex flex-col items-center space-y-3"
-                      >
-                        <div className="text-4xl">📸</div>
-                        <p className="text-sm font-medium text-foreground">
-                          Click to upload an image
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, JPEG (Max 10MB)
-                        </p>
-                      </label>
-                    </div>
+                    <>
+                      <SignedIn>
+                        <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePreviewImageUpload}
+                            className="hidden"
+                            id="preview-image-upload"
+                            disabled={isGenerating}
+                          />
+                          <label
+                            htmlFor="preview-image-upload"
+                            className="cursor-pointer flex flex-col items-center space-y-3"
+                          >
+                            <div className="text-4xl">📸</div>
+                            <p className="text-sm font-medium text-foreground">
+                              Click to upload an image
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              PNG, JPG, JPEG (Max 10MB)
+                            </p>
+                          </label>
+                        </div>
+                      </SignedIn>
+                      <SignedOut>
+                        <div className="border-2 border-dashed border-muted rounded-lg p-6 text-center bg-muted/20">
+                          <SignInButton mode="modal">
+                            <button className="flex flex-col items-center space-y-3 text-muted-foreground hover:text-foreground transition-colors">
+                              <div className="text-4xl">🔒</div>
+                              <p className="text-sm font-medium">
+                                Sign in to upload images
+                              </p>
+                              <p className="text-xs">
+                                Click here to sign in and start creating
+                              </p>
+                            </button>
+                          </SignInButton>
+                        </div>
+                      </SignedOut>
+                    </>
                   </div>
                 )}
               </div>
@@ -564,28 +584,47 @@ export default function ModelGenerator() {
                     Reference Image (Optional):
                   </label>
                   {!refineImage ? (
-                    <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleRefineImageUpload}
-                        className="hidden"
-                        id="refine-image-upload"
-                        disabled={isGenerating}
-                      />
-                      <label
-                        htmlFor="refine-image-upload"
-                        className="cursor-pointer flex flex-col items-center space-y-2"
-                      >
-                        <div className="text-2xl">🎨</div>
-                        <p className="text-sm text-muted-foreground">
-                          Upload reference image for texture
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, JPEG (Max 10MB)
-                        </p>
-                      </label>
-                    </div>
+                    <>
+                      <SignedIn>
+                        <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleRefineImageUpload}
+                            className="hidden"
+                            id="refine-image-upload"
+                            disabled={isGenerating}
+                          />
+                          <label
+                            htmlFor="refine-image-upload"
+                            className="cursor-pointer flex flex-col items-center space-y-2"
+                          >
+                            <div className="text-2xl">🎨</div>
+                            <p className="text-sm text-muted-foreground">
+                              Upload reference image for texture
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              PNG, JPG, JPEG (Max 10MB)
+                            </p>
+                          </label>
+                        </div>
+                      </SignedIn>
+                      <SignedOut>
+                        <div className="border-2 border-dashed border-muted rounded-lg p-4 text-center bg-muted/20">
+                          <SignInButton mode="modal">
+                            <button className="flex flex-col items-center space-y-2 text-muted-foreground hover:text-foreground transition-colors">
+                              <div className="text-2xl">🔒</div>
+                              <p className="text-sm">
+                                Sign in to upload reference images
+                              </p>
+                              <p className="text-xs">
+                                Click here to sign in
+                              </p>
+                            </button>
+                          </SignInButton>
+                        </div>
+                      </SignedOut>
+                    </>
                   ) : (
                     <div className="space-y-2">
                       <div className="relative w-full h-32 border-2 border-dashed border-border rounded-lg overflow-hidden">
@@ -629,29 +668,41 @@ export default function ModelGenerator() {
               </div>
             )}
 
-            <Button
-              onClick={generateModel}
-              disabled={isGenerating ||
-                (generationStage === 'preview' && generationMethod === 'text' && !prompt.trim()) ||
-                (generationStage === 'preview' && generationMethod === 'image' && !previewImage) ||
-                (generationStage === 'refine' && !selectedModel?.previewTaskId)}
-              className="w-full"
-              size="lg"
-            >
-              <div className="flex items-center space-x-2">
-                {isGenerating && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                )}
-                <span>
-                  {isGenerating
-                    ? (currentStage || 'Generating...')
-                    : generationStage === 'preview'
-                      ? 'Generate Preview Model'
-                      : 'Generate Refined Model'
-                  }
-                </span>
-              </div>
-            </Button>
+            <SignedIn>
+              <Button
+                onClick={generateModel}
+                disabled={isGenerating ||
+                  (generationStage === 'preview' && generationMethod === 'text' && !prompt.trim()) ||
+                  (generationStage === 'preview' && generationMethod === 'image' && !previewImage) ||
+                  (generationStage === 'refine' && !selectedModel?.previewTaskId)}
+                className="w-full"
+                size="lg"
+              >
+                <div className="flex items-center space-x-2">
+                  {isGenerating && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                  )}
+                  <span>
+                    {isGenerating
+                      ? (currentStage || 'Generating...')
+                      : generationStage === 'preview'
+                        ? 'Generate Preview Model'
+                        : 'Generate Refined Model'
+                    }
+                  </span>
+                </div>
+              </Button>
+            </SignedIn>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <Button className="w-full" size="lg">
+                  <div className="flex items-center space-x-2">
+                    <span>🔒</span>
+                    <span>Sign in to Generate Models</span>
+                  </div>
+                </Button>
+              </SignInButton>
+            </SignedOut>
           </div>
         </div>
 
