@@ -1,7 +1,14 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useEffect, useState, useCallback } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 
 interface CreditStats {
   currentCredits: number
@@ -33,32 +40,68 @@ interface CreditHistory {
   } | null
 }
 
-export function useCredits() {
+type SpendResponse = {
+  success: boolean
+  remainingCredits?: number
+  error?: string
+}
+
+interface CreditsContextValue {
+  credits: number
+  stats: CreditStats | null
+  loading: boolean
+  error: string | null
+  hasEnoughCredits: (serviceType: string) => boolean
+  spendCredits: (
+    serviceType: string,
+    metadata?: Record<string, unknown>
+  ) => Promise<SpendResponse>
+  initializeCredits: () => Promise<void>
+  fetchCredits: () => Promise<void>
+  fetchStats: () => Promise<void>
+  fetchHistory: (limit?: number) => Promise<CreditHistory[]>
+  refresh: () => Promise<void>
+}
+
+const CreditsContext = createContext<CreditsContextValue | undefined>(undefined)
+
+function useCreditsStore(): CreditsContextValue {
   const { user } = useUser()
   const [credits, setCredits] = useState<number>(0)
   const [stats, setStats] = useState<CreditStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // 获取积分余额
+  const reset = useCallback(() => {
+    setCredits(0)
+    setStats(null)
+    setError(null)
+    setLoading(false)
+  }, [])
+
   const fetchCredits = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      reset()
+      return
+    }
 
     try {
       const response = await fetch(`/api/credits/balance?userId=${user.id}`)
       if (!response.ok) throw new Error('获取积分失败')
 
       const data = await response.json()
-      setCredits(data.credits)
+      setCredits(data.credits ?? 0)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取积分失败')
     }
-  }, [user?.id])
+  }, [reset, user?.id])
 
-  // 获取积分统计
   const fetchStats = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      reset()
+      return
+    }
 
     try {
       setLoading(true)
@@ -67,17 +110,16 @@ export function useCredits() {
 
       const data = await response.json()
       setStats(data)
-      setCredits(data.currentCredits)
+      setCredits(data.currentCredits ?? 0)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取积分统计失败')
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [reset, user?.id])
 
-  // 获取积分历史
-  const fetchHistory = async (limit = 20): Promise<CreditHistory[]> => {
+  const fetchHistory = useCallback(async (limit = 20): Promise<CreditHistory[]> => {
     if (!user?.id) return []
 
     try {
@@ -91,10 +133,9 @@ export function useCredits() {
       setError(err instanceof Error ? err.message : '获取积分历史失败')
       return []
     }
-  }
+  }, [user?.id])
 
-  // 检查积分是否足够
-  const hasEnoughCredits = (serviceType: string): boolean => {
+  const hasEnoughCredits = useCallback((serviceType: string): boolean => {
     const costs: Record<string, number> = {
       'text-to-3d-preview': 5,
       'text-to-3d-optimized': 10,
@@ -102,13 +143,12 @@ export function useCredits() {
     }
 
     return credits >= (costs[serviceType] || 0)
-  }
+  }, [credits])
 
-  // 消耗积分
-  const spendCredits = async (
+  const spendCredits = useCallback(async (
     serviceType: string,
     metadata?: Record<string, unknown>
-  ): Promise<{ success: boolean; remainingCredits?: number; error?: string }> => {
+  ): Promise<SpendResponse> => {
     if (!user?.id) {
       return { success: false, error: '用户未登录' }
     }
@@ -132,7 +172,7 @@ export function useCredits() {
         return { success: false, error: data.error || '积分消耗失败' }
       }
 
-      setCredits(data.remainingCredits)
+      setCredits(data.remainingCredits ?? 0)
       return { success: true, remainingCredits: data.remainingCredits }
     } catch (err) {
       return {
@@ -140,9 +180,8 @@ export function useCredits() {
         error: err instanceof Error ? err.message : '积分消耗失败'
       }
     }
-  }
+  }, [user?.id])
 
-  // 初始化用户积分
   const initializeCredits = useCallback(async () => {
     if (!user?.id || !user?.emailAddresses?.[0]?.emailAddress) return
 
@@ -162,15 +201,17 @@ export function useCredits() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '初始化积分失败')
     }
-  }, [user?.id, user?.emailAddresses, fetchCredits])
+  }, [fetchCredits, user?.emailAddresses, user?.id])
 
   useEffect(() => {
     if (user?.id) {
       fetchStats()
+    } else {
+      reset()
     }
-  }, [user?.id, fetchStats])
+  }, [fetchStats, reset, user?.id])
 
-  return {
+  return useMemo(() => ({
     credits,
     stats,
     loading,
@@ -182,5 +223,33 @@ export function useCredits() {
     fetchStats,
     fetchHistory,
     refresh: fetchStats,
+  }), [
+    credits,
+    stats,
+    loading,
+    error,
+    hasEnoughCredits,
+    spendCredits,
+    initializeCredits,
+    fetchCredits,
+    fetchStats,
+    fetchHistory,
+  ])
+}
+
+export function CreditsProvider({ children }: { children: React.ReactNode }) {
+  const value = useCreditsStore()
+  return (
+    <CreditsContext.Provider value={value}>
+      {children}
+    </CreditsContext.Provider>
+  )
+}
+
+export function useCredits(): CreditsContextValue {
+  const context = useContext(CreditsContext)
+  if (!context) {
+    throw new Error('useCredits must be used within a CreditsProvider')
   }
+  return context
 }

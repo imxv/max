@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
+import { useCredits } from '@/hooks/useCredits';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
@@ -53,6 +54,7 @@ interface GeneratedModel {
 }
 
 export default function ModelGenerator() {
+  const { refresh: refreshCredits } = useCredits();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStage, setCurrentStage] = useState('');
@@ -217,11 +219,26 @@ export default function ModelGenerator() {
         });
 
         if (!previewResponse.ok) {
-          throw new Error('Failed to create preview task');
+          if (previewResponse.status === 402) {
+            const errorData = await previewResponse.json();
+            throw new Error(`INSUFFICIENT_CREDITS: ${errorData.error || '积分不足，请充值后再试'}`);
+          } else if (previewResponse.status === 401) {
+            throw new Error('UNAUTHORIZED: 请先登录');
+          } else {
+            const errorData = await previewResponse.json().catch(() => ({}));
+            throw new Error(`API_ERROR: ${errorData.error || 'Failed to create preview task'}`);
+          }
         }
 
         const previewData = await previewResponse.json();
         console.log('Preview API response:', previewData);
+
+        // 如果API响应中包含积分信息，立即刷新积分显示
+        if (previewData.creditInfo) {
+          console.log('Credits consumed:', previewData.creditInfo);
+          await refreshCredits();
+        }
+
         setCurrentStage('Generating preview mesh...');
 
         // Check different possible field names for task ID
@@ -301,11 +318,26 @@ export default function ModelGenerator() {
         });
 
         if (!refineResponse.ok) {
-          throw new Error('Failed to create refinement task');
+          if (refineResponse.status === 402) {
+            const errorData = await refineResponse.json();
+            throw new Error(`INSUFFICIENT_CREDITS: ${errorData.error || '积分不足，请充值后再试'}`);
+          } else if (refineResponse.status === 401) {
+            throw new Error('UNAUTHORIZED: 请先登录');
+          } else {
+            const errorData = await refineResponse.json().catch(() => ({}));
+            throw new Error(`API_ERROR: ${errorData.error || 'Failed to create refinement task'}`);
+          }
         }
 
         const refineData = await refineResponse.json();
         console.log('Refinement API response:', refineData);
+
+        // 如果API响应中包含积分信息，立即刷新积分显示
+        if (refineData.creditInfo) {
+          console.log('Credits consumed:', refineData.creditInfo);
+          await refreshCredits();
+        }
+
         setCurrentStage('Generating refined model with textures...');
 
         // Check different possible field names for task ID
@@ -349,7 +381,21 @@ export default function ModelGenerator() {
 
     } catch (error) {
       console.error('Generation error:', error);
-      setCurrentStage('Generation failed. Please try again.');
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      if (errorMessage.startsWith('INSUFFICIENT_CREDITS:')) {
+        const message = errorMessage.replace('INSUFFICIENT_CREDITS: ', '');
+        setCurrentStage(`💳 ${message}`);
+      } else if (errorMessage.startsWith('UNAUTHORIZED:')) {
+        const message = errorMessage.replace('UNAUTHORIZED: ', '');
+        setCurrentStage(`🔒 ${message}`);
+      } else if (errorMessage.startsWith('API_ERROR:')) {
+        const message = errorMessage.replace('API_ERROR: ', '');
+        setCurrentStage(`❌ ${message}`);
+      } else {
+        setCurrentStage('❌ Generation failed. Please try again.');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -692,6 +738,11 @@ export default function ModelGenerator() {
                   </span>
                 </div>
               </Button>
+              <div className="text-xs text-muted-foreground mt-2 px-1 text-center">
+                💰 消耗积分: {generationStage === 'preview' ? '5积分' : '10积分'}
+                {generationStage === 'preview' && ' (预览模式)'}
+                {generationStage === 'refine' && ' (精细化模式)'}
+              </div>
             </SignedIn>
             <SignedOut>
               <SignInButton mode="modal">
