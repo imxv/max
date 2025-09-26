@@ -8,6 +8,7 @@ import {
   UserButton,
 } from '@clerk/nextjs';
 import { Geist, Geist_Mono } from "next/font/google";
+import CreditsDisplay from '@/components/CreditsDisplay';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -46,6 +47,7 @@ export default function RootLayout({
               </SignUpButton>
             </SignedOut>
             <SignedIn>
+              <CreditsDisplay />
               <UserButton />
             </SignedIn>
           </header>

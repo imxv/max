@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,4 +5,91 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id              String              @id
+  email           String              @unique
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  transactions    CreditTransaction[]
+  generatedModels GeneratedModel[]
+  credits         UserCredits?
+
+  @@map("users")
+}
+
+model ServiceType {
+  id           String              @id @default(cuid())
+  name         String              @unique
+  description  String?
+  creditCost   Int
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  transactions CreditTransaction[]
+
+  @@map("service_types")
+}
+
+model UserCredits {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  currentCredits Int      @default(45)
+  totalEarned    Int      @default(45)
+  totalSpent     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_credits")
+}
+
+model CreditTransaction {
+  id            String          @id @default(cuid())
+  userId        String
+  serviceTypeId String?
+  amount        Int
+  type          TransactionType
+  description   String?
+  balanceAfter  Int
+  metadata      Json?
+  createdAt     DateTime        @default(now())
+  serviceType   ServiceType?    @relation(fields: [serviceTypeId], references: [id])
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("credit_transactions")
+}
+
+model GeneratedModel {
+  id           String      @id @default(cuid())
+  userId       String
+  serviceType  String
+  modelUrl     String?
+  thumbnailUrl String?
+  prompt       String?
+  creditsCost  Int
+  status       ModelStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("generated_models")
+}
+
+enum TransactionType {
+  EARN
+  SPEND
+  REFUND
+  BONUS
+}
+
+enum ModelStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
