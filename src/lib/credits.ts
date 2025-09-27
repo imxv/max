@@ -120,7 +120,7 @@ export async function spendCredits(
         type: 'SPEND',
         description: `使用${serviceType}服务`,
         balanceAfter: updatedCredits.currentCredits,
-        metadata,
+        metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
       },
     })
 

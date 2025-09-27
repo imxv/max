@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs';
+import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/nextjs';
 import { useCredits } from '@/hooks/useCredits';
+import { useModels } from '@/hooks/useModels';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
@@ -42,7 +43,7 @@ interface TaskStatus {
   };
 }
 
-interface GeneratedModel {
+interface GeneratedModelLocal {
   id: string;
   prompt: string;
   modelUrl: string;
@@ -54,13 +55,14 @@ interface GeneratedModel {
 }
 
 export default function ModelGenerator() {
+  const { user } = useUser();
   const { refresh: refreshCredits } = useCredits();
+  const { models, loading: modelsLoading, loadModels } = useModels();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStage, setCurrentStage] = useState('');
   const [modelUrl, setModelUrl] = useState<string>('');
-  const [modelHistory, setModelHistory] = useState<GeneratedModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<GeneratedModel | null>(null);
+  const [selectedModel, setSelectedModel] = useState<GeneratedModelLocal | null>(null);
 
   // New refinement-related state
   const [generationStage, setGenerationStage] = useState<'preview' | 'refine'>('preview');
@@ -75,6 +77,37 @@ export default function ModelGenerator() {
 
   // Generation method state
   const [generationMethod, setGenerationMethod] = useState<'text' | 'image'>('text');
+
+  // Helper function to convert database model to local format
+  const convertToLocalModel = (dbModel: {
+    id: string;
+    serviceType: string;
+    prompt: string | null;
+    modelUrl: string | null;
+    thumbnailUrl: string | null;
+    createdAt: Date;
+  }): GeneratedModelLocal => ({
+    id: dbModel.id,
+    prompt: dbModel.prompt || '',
+    modelUrl: dbModel.modelUrl || '',
+    createdAt: dbModel.createdAt,
+    thumbnailUrl: dbModel.thumbnailUrl || undefined,
+    previewTaskId: dbModel.id, // Use the model ID as preview task ID
+    stage: dbModel.serviceType.includes('preview') ? 'preview' : 'refined',
+    taskType: dbModel.serviceType === 'image-generation' ? 'image-to-3d' : 'text-to-3d',
+  });
+
+  // Convert database models to local format
+  const localModels = models.map(convertToLocalModel);
+
+  // Clear current model when user logs out
+  useEffect(() => {
+    if (!user) {
+      setSelectedModel(null);
+      setModelUrl('');
+      setCurrentStage('');
+    }
+  }, [user]);
 
   // Auto-switch to preview mode if refinement is selected but no valid preview model
   useEffect(() => {
@@ -263,8 +296,8 @@ export default function ModelGenerator() {
             setModelUrl(modelUrl);
             setCurrentStage('Preview model ready!');
 
-            // Add to history
-            const newModel: GeneratedModel = {
+            // Create local model representation
+            const newModel: GeneratedModelLocal = {
               id: taskId,
               prompt: generationMethod === 'image' ? 'Generated from uploaded image' : prompt,
               modelUrl: modelUrl,
@@ -274,7 +307,6 @@ export default function ModelGenerator() {
               stage: 'preview',
               taskType: currentTaskType
             };
-            setModelHistory(prev => [newModel, ...prev]);
             setSelectedModel(newModel);
 
             // Clear input after successful preview generation
@@ -284,6 +316,11 @@ export default function ModelGenerator() {
               setPreviewImage('');
               setPreviewImageFile(null);
             }
+
+            // Refresh models list to show the new model
+            setTimeout(() => {
+              loadModels();
+            }, 1000);
           }
         }
 
@@ -362,8 +399,8 @@ export default function ModelGenerator() {
             setModelUrl(modelUrl);
             setCurrentStage('Refined model ready!');
 
-            // Add refined model to history
-            const refinedModel: GeneratedModel = {
+            // Create local model representation for refined model
+            const refinedModel: GeneratedModelLocal = {
               id: refineTaskId,
               prompt: `${selectedModel?.prompt || ''}${texturePrompt ? ` (${texturePrompt})` : ''}`,
               modelUrl: modelUrl,
@@ -373,8 +410,12 @@ export default function ModelGenerator() {
               stage: 'refined',
               taskType: 'text-to-3d' // Refinement is always text-to-3d
             };
-            setModelHistory(prev => [refinedModel, ...prev]);
             setSelectedModel(refinedModel);
+
+            // Refresh models list to show the new refined model
+            setTimeout(() => {
+              loadModels();
+            }, 1000);
           }
         }
       }
@@ -814,20 +855,25 @@ export default function ModelGenerator() {
             Generated Models
           </h2>
           <p className="text-sm text-muted-foreground">
-            {modelHistory.length} model{modelHistory.length !== 1 ? 's' : ''}
+            {localModels.length} model{localModels.length !== 1 ? 's' : ''} {modelsLoading && '(loading...)'}
           </p>
         </div>
 
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-3">
-            {modelHistory.length === 0 ? (
+            {modelsLoading && localModels.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <div className="text-4xl mb-2">⏳</div>
+                <p className="text-sm">Loading your models...</p>
+              </div>
+            ) : localModels.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <div className="text-4xl mb-2">📁</div>
                 <p className="text-sm">No models generated yet</p>
                 <p className="text-xs mt-1">Start by creating your first 3D model</p>
               </div>
             ) : (
-              modelHistory.map((model) => (
+              localModels.map((model) => (
                 <Card
                   key={model.id}
                   className={`cursor-pointer transition-all hover:shadow-md ${

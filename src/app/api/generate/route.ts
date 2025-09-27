@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { hasEnoughCredits, spendCredits, type ServiceType } from '@/lib/credits';
+import { prisma } from '@/lib/prisma';
+import { ModelStatus } from '@prisma/client';
 
 const MESHY_API_KEY = 'msy_dummy_api_key_for_test_mode_12345678';
 const MESHY_BASE_URL = 'https://api.meshy.ai';
@@ -137,6 +139,29 @@ export async function POST(request: NextRequest) {
 
       console.log('积分扣除成功:', spendResult);
 
+      // 保存模型记录到数据库
+      const taskId = data.result || data.id || data.task_id || data.taskId;
+      if (taskId) {
+        try {
+          await prisma.generatedModel.create({
+            data: {
+              id: taskId,
+              userId: userId,
+              serviceType,
+              modelUrl: null, // Will be updated when model is ready
+              thumbnailUrl: null, // Will be updated when model is ready
+              prompt: prompt || (isImageTo3D ? 'Generated from uploaded image' : null),
+              creditsCost: Math.abs(spendResult.transaction.amount),
+              status: ModelStatus.PENDING,
+            },
+          });
+          console.log('模型记录已创建:', taskId);
+        } catch (dbError) {
+          console.error('创建模型记录失败:', dbError);
+          // 不抛出错误，继续执行，因为Meshy API调用已成功
+        }
+      }
+
       // 在响应中包含积分信息
       return NextResponse.json({
         ...data,
@@ -196,6 +221,30 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     console.log('Meshy API status response:', data);
+
+    // Update model status in database if task is completed
+    if (data.status === 'SUCCEEDED' || data.status === 'FAILED') {
+      try {
+        const modelUrl = data.model_urls?.glb || data.result?.model_urls?.glb;
+        const thumbnailUrl = data.thumbnail_url || data.result?.thumbnail_url;
+
+        await prisma.generatedModel.updateMany({
+          where: {
+            id: taskId,
+          },
+          data: {
+            modelUrl: modelUrl || null,
+            thumbnailUrl: thumbnailUrl || null,
+            status: data.status === 'SUCCEEDED' ? ModelStatus.COMPLETED : ModelStatus.FAILED,
+          },
+        });
+        console.log('模型状态已更新:', taskId, data.status);
+      } catch (dbError) {
+        console.error('更新模型状态失败:', dbError);
+        // 不抛出错误，继续返回API结果
+      }
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching task status:', error);
