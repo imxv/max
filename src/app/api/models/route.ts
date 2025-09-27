@@ -11,8 +11,24 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+
+    const rawLimit = searchParams.get('limit');
+    const parsedLimit = rawLimit !== null ? Number.parseInt(rawLimit, 10) : NaN;
+    const limit = Number.isNaN(parsedLimit) || parsedLimit <= 0
+      ? 50
+      : Math.min(parsedLimit, 100); // Cap page size to prevent extreme queries
+
+    const rawOffset = searchParams.get('offset');
+    const parsedOffset = rawOffset !== null ? Number.parseInt(rawOffset, 10) : 0;
+    const offset = Number.isNaN(parsedOffset) || parsedOffset < 0 ? 0 : parsedOffset;
+
+    console.log('Fetching generated models', {
+      userId,
+      limit,
+      offset,
+      rawLimit,
+      rawOffset,
+    });
 
     const models = await prisma.generatedModel.findMany({
       where: {
@@ -25,17 +41,22 @@ export async function GET(request: NextRequest) {
       skip: offset,
     });
 
+    const total = await prisma.generatedModel.count({
+      where: { userId }
+    });
+
     return NextResponse.json({
       models,
-      total: await prisma.generatedModel.count({
-        where: { userId }
-      })
+      total,
     });
 
   } catch (error) {
     console.error('Error fetching models:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch models' },
+      {
+        error: 'Failed to fetch models',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }

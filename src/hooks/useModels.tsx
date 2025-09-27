@@ -13,6 +13,7 @@ export interface GeneratedModel {
   prompt: string | null;
   creditsCost: number;
   status: ModelStatus;
+  rating: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +32,7 @@ interface UseModelsReturn {
     creditsCost: number;
     status?: ModelStatus;
   }) => Promise<GeneratedModel | null>;
+  updateModelRating: (modelId: string, rating: number) => Promise<boolean>;
   deleteModel: (modelId: string) => Promise<boolean>;
   total: number;
 }
@@ -154,6 +156,46 @@ export function useModels(): UseModelsReturn {
     }
   }, []);
 
+  const updateModelRating = useCallback(async (modelId: string, rating: number): Promise<boolean> => {
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/models/${encodeURIComponent(modelId)}/rating`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rating }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('请先登录');
+        }
+        if (response.status === 404) {
+          throw new Error('模型不存在或已被删除');
+        }
+        throw new Error(`Failed to update rating: ${response.status}`);
+      }
+
+      // Update local state
+      setModels(prevModels =>
+        prevModels.map(model =>
+          model.id === modelId
+            ? { ...model, rating, updatedAt: new Date() }
+            : model
+        )
+      );
+
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update rating';
+      setError(errorMessage);
+      console.error('Error updating model rating:', err);
+      return false;
+    }
+  }, []);
+
   const deleteModel = useCallback(async (modelId: string): Promise<boolean> => {
     setError(null);
 
@@ -194,6 +236,7 @@ export function useModels(): UseModelsReturn {
     error,
     loadModels,
     saveModel,
+    updateModelRating,
     deleteModel,
     total,
   };

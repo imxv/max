@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/nextjs';
 import { useCredits } from '@/hooks/useCredits';
 import { useModels } from '@/hooks/useModels';
+import ModelRating from '@/components/ModelRating';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
@@ -52,17 +53,22 @@ interface GeneratedModelLocal {
   previewTaskId?: string; // For refinement
   stage?: 'preview' | 'refined';
   taskType?: 'text-to-3d' | 'image-to-3d'; // Track task type for API calls
+  rating?: number | null;
 }
 
 export default function ModelGenerator() {
   const { user } = useUser();
   const { refresh: refreshCredits } = useCredits();
-  const { models, loading: modelsLoading, loadModels } = useModels();
+  const { models, loading: modelsLoading, loadModels, updateModelRating } = useModels();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStage, setCurrentStage] = useState('');
   const [modelUrl, setModelUrl] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<GeneratedModelLocal | null>(null);
+
+  // Rating state
+  const [showRating, setShowRating] = useState(false);
+  const [ratingModelId, setRatingModelId] = useState<string>('');
 
   // New refinement-related state
   const [generationStage, setGenerationStage] = useState<'preview' | 'refine'>('preview');
@@ -85,6 +91,7 @@ export default function ModelGenerator() {
     prompt: string | null;
     modelUrl: string | null;
     thumbnailUrl: string | null;
+    rating: number | null;
     createdAt: Date;
   }): GeneratedModelLocal => ({
     id: dbModel.id,
@@ -95,6 +102,7 @@ export default function ModelGenerator() {
     previewTaskId: dbModel.id, // Use the model ID as preview task ID
     stage: dbModel.serviceType.includes('preview') ? 'preview' : 'refined',
     taskType: dbModel.serviceType === 'image-generation' ? 'image-to-3d' : 'text-to-3d',
+    rating: dbModel.rating,
   });
 
   // Convert database models to local format
@@ -169,6 +177,35 @@ export default function ModelGenerator() {
   const removeRefineImage = () => {
     setRefineImage('');
     setRefineImageFile(null);
+  };
+
+  // Handle rating submission
+  const handleRatingSubmit = async (rating: number) => {
+    if (!ratingModelId) return;
+
+    try {
+      const success = await updateModelRating(ratingModelId, rating);
+      if (success) {
+        // Update the selected model if it matches the rated model
+        if (selectedModel?.id === ratingModelId) {
+          setSelectedModel(prev => prev ? { ...prev, rating } : null);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to submit rating:', error);
+    }
+  };
+
+  // Show rating dialog for a model
+  const showRatingDialog = (modelId: string) => {
+    setRatingModelId(modelId);
+    setShowRating(true);
+  };
+
+  // Hide rating dialog
+  const hideRatingDialog = () => {
+    setShowRating(false);
+    setRatingModelId('');
   };
 
   const pollTaskStatus = async (taskId: string, taskType: 'text-to-3d' | 'image-to-3d' = 'text-to-3d'): Promise<TaskStatus> => {
@@ -321,6 +358,11 @@ export default function ModelGenerator() {
             setTimeout(() => {
               loadModels();
             }, 1000);
+
+            // Show rating dialog after successful generation
+            setTimeout(() => {
+              showRatingDialog(taskId);
+            }, 1500);
           }
         }
 
@@ -416,6 +458,11 @@ export default function ModelGenerator() {
             setTimeout(() => {
               loadModels();
             }, 1000);
+
+            // Show rating dialog after successful refined generation
+            setTimeout(() => {
+              showRatingDialog(refineTaskId);
+            }, 1500);
           }
         }
       }
@@ -913,13 +960,26 @@ export default function ModelGenerator() {
                           <p className="text-xs text-muted-foreground">
                             {model.createdAt.toLocaleString()}
                           </p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            model.stage === 'refined'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                              : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-                          }`}>
-                            {model.stage === 'refined' ? 'Refined' : 'Preview'}
-                          </span>
+                          <div className="flex items-center space-x-2">
+                            {/* Rating Display */}
+                            {model.rating && (
+                              <div className="flex items-center text-xs">
+                                <span className="text-yellow-400">
+                                  {'★'.repeat(model.rating)}
+                                </span>
+                                <span className="text-gray-300 ml-0.5">
+                                  {'★'.repeat(5 - model.rating)}
+                                </span>
+                              </div>
+                            )}
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              model.stage === 'refined'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                            }`}>
+                              {model.stage === 'refined' ? 'Refined' : 'Preview'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -930,6 +990,20 @@ export default function ModelGenerator() {
           </div>
         </ScrollArea>
       </div>
+
+      {/* Rating Modal */}
+      {showRating && ratingModelId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md">
+            <ModelRating
+              modelId={ratingModelId}
+              currentRating={selectedModel?.id === ratingModelId ? selectedModel.rating : null}
+              onRatingSubmit={handleRatingSubmit}
+              onClose={hideRatingDialog}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
