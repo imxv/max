@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import HeaderContent from '@/components/HeaderContent';
 
 interface AdminModel {
   id: string;
@@ -36,10 +37,11 @@ interface AdminModelsResponse {
 
 export default function AdminPage() {
   const { user, isLoaded } = useUser();
-  const [models, setModels] = useState<AdminModel[]>([]);
+  const [allModels, setAllModels] = useState<AdminModel[]>([]);
   const [stats, setStats] = useState<AdminModelsResponse['stats'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'rated'>('all');
 
   // 模态框状态
   const [selectedModel, setSelectedModel] = useState<AdminModel | null>(null);
@@ -47,6 +49,11 @@ export default function AdminPage() {
 
   // 检查是否为管理员
   const isAdmin = user?.publicMetadata?.role === 'admin';
+
+  // 根据过滤类型计算显示的模型
+  const filteredModels = filterType === 'rated'
+    ? allModels.filter(model => model.rating !== null || model.comment !== null)
+    : allModels;
 
   useEffect(() => {
     if (isLoaded && !isAdmin) {
@@ -70,7 +77,7 @@ export default function AdminPage() {
       }
 
       const data: AdminModelsResponse = await response.json();
-      setModels(data.models);
+      setAllModels(data.models);
       setStats(data.stats);
     } catch (error) {
       console.error('Failed to fetch models:', error);
@@ -115,28 +122,94 @@ export default function AdminPage() {
 
   if (error) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Card className="w-96 bg-destructive/10 border-destructive/20">
-          <CardContent className="p-6 text-center">
-            <h2 className="text-xl font-bold text-destructive mb-2">Access Denied</h2>
-            <p className="text-destructive/80">{error}</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="bg-background border-b border-border px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                Admin Dashboard
+              </h1>
+            </div>
+            <HeaderContent />
+          </div>
+        </header>
+        <div className="flex-1 flex justify-center items-center">
+          <Card className="w-96 bg-destructive/10 border-destructive/20">
+            <CardContent className="p-6 text-center">
+              <h2 className="text-xl font-bold text-destructive mb-2">Access Denied</h2>
+              <p className="text-destructive/80">{error}</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">Loading models...</div>;
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="bg-background border-b border-border px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                Admin Dashboard
+              </h1>
+            </div>
+            <HeaderContent />
+          </div>
+        </header>
+        <div className="flex-1 flex justify-center items-center">Loading models...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Model ratings and user feedback overview</p>
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="bg-background border-b border-border px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Admin Dashboard
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              User-generated models overview and ratings
+            </p>
+          </div>
+          <HeaderContent />
+        </div>
+      </header>
+
+      <div className="flex-1 p-6">
+        <div className="max-w-7xl mx-auto">
+          {/* Filter Options */}
+        <div className="mb-6">
+          <div className="flex items-center space-x-4">
+            <span className="text-sm font-medium text-foreground">显示模型:</span>
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="filter"
+                  value="all"
+                  checked={filterType === 'all'}
+                  onChange={(e) => setFilterType(e.target.value as 'all' | 'rated')}
+                  className="w-4 h-4 text-primary border-border focus:ring-primary"
+                />
+                <span className="text-sm text-foreground">全部模型</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="filter"
+                  value="rated"
+                  checked={filterType === 'rated'}
+                  onChange={(e) => setFilterType(e.target.value as 'all' | 'rated')}
+                  className="w-4 h-4 text-primary border-border focus:ring-primary"
+                />
+                <span className="text-sm text-foreground">仅已评分模型</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -165,10 +238,10 @@ export default function AdminPage() {
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Total Feedback</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Models</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{models.length}</div>
+                <div className="text-2xl font-bold text-foreground">{filteredModels.length}</div>
               </CardContent>
             </Card>
           </div>
@@ -177,15 +250,15 @@ export default function AdminPage() {
         {/* Models Table */}
         <Card>
           <CardHeader>
-            <CardTitle>User Model Feedback</CardTitle>
+            <CardTitle>User Generated Models</CardTitle>
           </CardHeader>
           <CardContent>
-            {models.length === 0 ? (
+            {filteredModels.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                No models with ratings found
+                No models found
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border">
@@ -197,7 +270,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {models.map((model) => (
+                    {filteredModels.map((model) => (
                       <tr key={model.id} className="border-b border-border hover:bg-muted">
                         <td className="py-3 px-4">
                           <div>
@@ -288,12 +361,13 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
 
       {/* 评价详情模态框 */}
       {showModal && selectedModel && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background border border-border rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="bg-background border border-border rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
             <div className="p-6">
               {/* 模态框头部 */}
               <div className="flex items-center justify-between mb-6">

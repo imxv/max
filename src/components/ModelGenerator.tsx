@@ -11,6 +11,7 @@ import { SignedIn, SignedOut, SignInButton, useUser } from '@clerk/nextjs';
 import { useCredits } from '@/hooks/useCredits';
 import { useModels } from '@/hooks/useModels';
 import ModelRating from '@/components/ModelRating';
+import SimilarModelsDialog from '@/components/SimilarModelsDialog';
 
 // Dynamically import the ModelViewer component with no SSR
 const ModelViewer = dynamic(() => import('./ModelViewer'), {
@@ -56,6 +57,18 @@ interface GeneratedModelLocal {
   rating?: number | null;
 }
 
+interface SimilarModel {
+  id: string;
+  prompt: string;
+  modelUrl: string;
+  thumbnailUrl?: string;
+  serviceType: string;
+  createdAt: string;
+  userId: string;
+  similarity: number;
+  isOwnModel: boolean;
+}
+
 export default function ModelGenerator() {
   const { user } = useUser();
   const { refresh: refreshCredits } = useCredits();
@@ -83,6 +96,134 @@ export default function ModelGenerator() {
 
   // Generation method state
   const [generationMethod, setGenerationMethod] = useState<'text' | 'image'>('text');
+
+  // Model reuse state
+  const [showSimilarModels, setShowSimilarModels] = useState(false);
+  const [similarModels, setSimilarModels] = useState<SimilarModel[]>([]);
+  const [isCheckingSimilar, setIsCheckingSimilar] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState('');
+  const [exactMatch, setExactMatch] = useState(false);
+  const [isReusing, setIsReusing] = useState(false);
+
+  // Check for similar models
+  const checkSimilarModels = async (inputPrompt: string): Promise<boolean> => {
+    if (!inputPrompt.trim() || inputPrompt.trim().length < 1) {
+      return false; // Skip check for empty prompts
+    }
+
+    try {
+      setIsCheckingSimilar(true);
+      const response = await fetch('/api/models/similar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: inputPrompt.trim(),
+          threshold: 0.3, // 降低阈值以便更容易匹配
+          limit: 5
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to check similar models');
+        return false;
+      }
+
+      const data = await response.json();
+
+      if (data.similarModels && data.similarModels.length > 0) {
+        setSimilarModels(data.similarModels);
+        setExactMatch(data.exactMatch);
+        setPendingPrompt(inputPrompt);
+        setShowSimilarModels(true);
+        return true; // Found similar models
+      }
+
+      return false; // No similar models found
+    } catch (error) {
+      console.error('Error checking similar models:', error);
+      return false;
+    } finally {
+      setIsCheckingSimilar(false);
+    }
+  };
+
+  // Handle selecting a similar model for reuse
+  const handleSelectSimilarModel = async (selectedModel: SimilarModel) => {
+    try {
+      setIsReusing(true);
+
+      const response = await fetch('/api/models/reuse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originalModelId: selectedModel.id,
+          newPrompt: pendingPrompt
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to reuse model');
+      }
+
+      const data = await response.json();
+
+      // Update the current view with the reused model
+      const reusedModel: GeneratedModelLocal = {
+        id: data.reusedModel.id,
+        prompt: data.reusedModel.prompt,
+        modelUrl: data.reusedModel.modelUrl,
+        createdAt: new Date(data.reusedModel.createdAt),
+        thumbnailUrl: data.reusedModel.thumbnailUrl,
+        stage: data.reusedModel.serviceType.includes('preview') ? 'preview' : 'refined',
+        taskType: data.reusedModel.serviceType === 'image-generation' ? 'image-to-3d' : 'text-to-3d'
+      };
+
+      setSelectedModel(reusedModel);
+      setModelUrl(reusedModel.modelUrl);
+      setCurrentStage('模型重用成功！');
+
+      // Clear input
+      setPrompt('');
+
+      // Close dialog
+      setShowSimilarModels(false);
+      setSimilarModels([]);
+      setPendingPrompt('');
+
+      // Refresh models list
+      setTimeout(() => {
+        loadModels();
+        setCurrentStage('');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error reusing model:', error);
+      setCurrentStage(`❌ 重用失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    } finally {
+      setIsReusing(false);
+    }
+  };
+
+  // Handle generating new model instead of reusing
+  const handleGenerateNewModel = () => {
+    setShowSimilarModels(false);
+    setSimilarModels([]);
+    // Continue with normal generation using pendingPrompt
+    if (pendingPrompt) {
+      setPrompt(pendingPrompt);
+      setPendingPrompt('');
+      // Start generation immediately
+      setTimeout(() => generateModelDirectly(pendingPrompt), 100);
+    }
+  };
+
+  // Close similar models dialog
+  const closeSimilarModelsDialog = () => {
+    setShowSimilarModels(false);
+    setSimilarModels([]);
+    setPendingPrompt('');
+  };
 
   // Helper function to convert database model to local format
   const convertToLocalModel = (dbModel: {
@@ -253,6 +394,25 @@ export default function ModelGenerator() {
     if (generationStage === 'preview' && generationMethod === 'image' && !previewImage) return;
     if (generationStage === 'refine' && !selectedModel?.previewTaskId) return;
 
+    // For text-to-3D preview mode, check for similar models first
+    if (generationStage === 'preview' && generationMethod === 'text' && prompt.trim()) {
+      const foundSimilar = await checkSimilarModels(prompt.trim());
+      if (foundSimilar) {
+        return; // Stop here and let user choose in the dialog
+      }
+    }
+
+    // If no similar models found, proceed with normal generation
+    await generateModelDirectly(prompt);
+  };
+
+  const generateModelDirectly = async (inputPrompt?: string) => {
+    const currentPrompt = inputPrompt || prompt;
+
+    if (generationStage === 'preview' && generationMethod === 'text' && !currentPrompt.trim()) return;
+    if (generationStage === 'preview' && generationMethod === 'image' && !previewImage) return;
+    if (generationStage === 'refine' && !selectedModel?.previewTaskId) return;
+
     setIsGenerating(true);
     setModelUrl('');
 
@@ -278,8 +438,8 @@ export default function ModelGenerator() {
           requestBody.image_url = previewImage;
           // For preview stage with image upload, we want white model (no texture)
           // Don't send enablePbr since should_texture will be false on backend
-        } else if (generationMethod === 'text' && prompt.trim()) {
-          requestBody.prompt = prompt;
+        } else if (generationMethod === 'text' && currentPrompt.trim()) {
+          requestBody.prompt = currentPrompt;
         }
 
         const previewResponse = await fetch('/api/generate', {
@@ -336,7 +496,7 @@ export default function ModelGenerator() {
             // Create local model representation
             const newModel: GeneratedModelLocal = {
               id: taskId,
-              prompt: generationMethod === 'image' ? 'Generated from uploaded image' : prompt,
+              prompt: generationMethod === 'image' ? 'Generated from uploaded image' : currentPrompt,
               modelUrl: modelUrl,
               createdAt: new Date(),
               thumbnailUrl: completedPreview.thumbnail_url || completedPreview.result?.thumbnail_url,
@@ -795,7 +955,7 @@ export default function ModelGenerator() {
             <SignedIn>
               <Button
                 onClick={generateModel}
-                disabled={isGenerating ||
+                disabled={(isGenerating || isCheckingSimilar || isReusing) ||
                   (generationStage === 'preview' && generationMethod === 'text' && !prompt.trim()) ||
                   (generationStage === 'preview' && generationMethod === 'image' && !previewImage) ||
                   (generationStage === 'refine' && !selectedModel?.previewTaskId)}
@@ -803,15 +963,19 @@ export default function ModelGenerator() {
                 size="lg"
               >
                 <div className="flex items-center space-x-2">
-                  {isGenerating && (
+                  {(isGenerating || isCheckingSimilar || isReusing) && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
                   )}
                   <span>
-                    {isGenerating
-                      ? (currentStage || 'Generating...')
-                      : generationStage === 'preview'
-                        ? 'Generate Preview Model'
-                        : 'Generate Refined Model'
+                    {isCheckingSimilar
+                      ? '🔍 检查相似模型...'
+                      : isReusing
+                        ? '✨ 重用模型中...'
+                        : isGenerating
+                          ? (currentStage || 'Generating...')
+                          : generationStage === 'preview'
+                            ? 'Generate Preview Model'
+                            : 'Generate Refined Model'
                     }
                   </span>
                 </div>
@@ -1007,6 +1171,19 @@ export default function ModelGenerator() {
             />
           </div>
         </div>
+      )}
+
+      {/* Similar Models Dialog */}
+      {showSimilarModels && (
+        <SimilarModelsDialog
+          searchPrompt={pendingPrompt}
+          similarModels={similarModels}
+          exactMatch={exactMatch}
+          onSelectModel={handleSelectSimilarModel}
+          onGenerateNew={handleGenerateNewModel}
+          onClose={closeSimilarModelsDialog}
+          isLoading={isReusing}
+        />
       )}
     </div>
   );

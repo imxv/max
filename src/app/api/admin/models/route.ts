@@ -20,19 +20,13 @@ export async function GET(request: NextRequest) {
     const parsedOffset = rawOffset !== null ? Number.parseInt(rawOffset, 10) : 0;
     const offset = Number.isNaN(parsedOffset) || parsedOffset < 0 ? 0 : parsedOffset;
 
-    console.log('Admin fetching all models with ratings', {
+    console.log('Admin fetching all models', {
       limit,
       offset,
     });
 
-    // 获取所有有评分的模型，关联用户信息
+    // 获取所有模型，关联用户信息
     const models = await prisma.generatedModel.findMany({
-      where: {
-        OR: [
-          { rating: { not: null } },
-          { comment: { not: null } }
-        ]
-      },
       include: {
         user: {
           select: {
@@ -49,14 +43,7 @@ export async function GET(request: NextRequest) {
       skip: offset,
     });
 
-    const total = await prisma.generatedModel.count({
-      where: {
-        OR: [
-          { rating: { not: null } },
-          { comment: { not: null } }
-        ]
-      }
-    });
+    const total = await prisma.generatedModel.count();
 
     // 计算一些基础统计
     const totalRatedModels = await prisma.generatedModel.count({

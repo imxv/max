@@ -15,7 +15,7 @@ export default function HeaderContent() {
   const isAdminPage = pathname.startsWith('/admin');
 
   return (
-    <header className="flex justify-end items-center p-4 gap-4 h-16">
+    <div className="flex items-center gap-4">
       <SignedOut>
         <SignInButton />
         <SignUpButton>
@@ -28,6 +28,6 @@ export default function HeaderContent() {
         {!isAdminPage && <CreditsDisplay />}
         <UserButton />
       </SignedIn>
-    </header>
+    </div>
   );
 }

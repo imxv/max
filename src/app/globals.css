@@ -94,3 +94,45 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Custom scrollbar styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; /* For horizontal scrollbar */
+  background: transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.2) !important;
+  border-radius: 3px;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.35) !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--muted-foreground) / 0.5) !important;
+}
+
+/* Make scrollbar more subtle */
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+}

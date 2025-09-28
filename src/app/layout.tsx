@@ -10,7 +10,6 @@ import {
 import { Geist, Geist_Mono } from "next/font/google";
 import CreditsDisplay from '@/components/CreditsDisplay';
 import { CreditsProvider } from '@/hooks/useCredits';
-import HeaderContent from '@/components/HeaderContent';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,7 +39,6 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <CreditsProvider>
-            <HeaderContent />
             {children}
           </CreditsProvider>
         </body>

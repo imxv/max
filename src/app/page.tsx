@@ -1,16 +1,22 @@
 import ModelGenerator from '@/components/ModelGenerator';
+import HeaderContent from '@/components/HeaderContent';
 
 export default function Home() {
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Top Header */}
       <header className="bg-background border-b border-border px-6 py-4 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-foreground">
-          AI 3D Model Generator
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Turn your text into stunning 3D models using AI
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              AI 3D Model Generator
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Turn your text into stunning 3D models using AI
+            </p>
+          </div>
+          <HeaderContent />
+        </div>
       </header>
 
       {/* Three Column Layout */}
