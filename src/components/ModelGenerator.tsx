@@ -358,11 +358,6 @@ export default function ModelGenerator() {
             setTimeout(() => {
               loadModels();
             }, 1000);
-
-            // Show rating dialog after successful generation
-            setTimeout(() => {
-              showRatingDialog(taskId);
-            }, 1500);
           }
         }
 
@@ -458,11 +453,6 @@ export default function ModelGenerator() {
             setTimeout(() => {
               loadModels();
             }, 1000);
-
-            // Show rating dialog after successful refined generation
-            setTimeout(() => {
-              showRatingDialog(refineTaskId);
-            }, 1500);
           }
         }
       }
@@ -873,23 +863,37 @@ export default function ModelGenerator() {
               </div>
             )}
 
-            {/* Download Button - Positioned at bottom right */}
+            {/* Download and Rating Buttons - Positioned at bottom right */}
             {selectedModel && (
-              <Button
-                asChild
-                variant="outline"
-                className="absolute bottom-4 right-4 shadow-lg bg-background/90 backdrop-blur-sm hover:bg-background"
-                size="sm"
-              >
-                <a
-                  href={selectedModel.modelUrl.includes('meshy.ai') ?
-                    `/api/proxy-model?url=${encodeURIComponent(selectedModel.modelUrl)}` :
-                    selectedModel.modelUrl}
-                  download="model.glb"
+              <div className="absolute bottom-4 right-4 flex space-x-2">
+                {/* Rating Button - Only show if model hasn't been rated */}
+                {!selectedModel.rating && (
+                  <Button
+                    onClick={() => showRatingDialog(selectedModel.id)}
+                    variant="outline"
+                    className="shadow-lg bg-background/90 backdrop-blur-sm hover:bg-background"
+                    size="sm"
+                  >
+                    ⭐ Rate Model
+                  </Button>
+                )}
+
+                <Button
+                  asChild
+                  variant="outline"
+                  className="shadow-lg bg-background/90 backdrop-blur-sm hover:bg-background"
+                  size="sm"
                 >
-                  Download GLB Model
-                </a>
-              </Button>
+                  <a
+                    href={selectedModel.modelUrl.includes('meshy.ai') ?
+                      `/api/proxy-model?url=${encodeURIComponent(selectedModel.modelUrl)}` :
+                      selectedModel.modelUrl}
+                    download="model.glb"
+                  >
+                    Download GLB Model
+                  </a>
+                </Button>
+              </div>
             )}
           </div>
         </div>

@@ -59,24 +59,24 @@ export default function ModelRating({
 
   if (isSubmitted) {
     return (
-      <Card className="w-full max-w-md mx-auto bg-green-50 border-green-200">
+      <Card className="w-full max-w-md mx-auto bg-zinc-900 border-zinc-700">
         <CardContent className="p-4 text-center">
-          <div className="text-green-600 text-2xl mb-2">✓</div>
-          <p className="text-green-800 font-medium">Rating submitted!</p>
-          <p className="text-green-600 text-sm">Thank you for your feedback</p>
+          <div className="text-emerald-400 text-2xl mb-2">✓</div>
+          <p className="text-zinc-100 font-medium">Rating submitted!</p>
+          <p className="text-zinc-400 text-sm">Thank you for your feedback</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-md mx-auto bg-zinc-900 border-zinc-700">
       <CardContent className="p-6">
         <div className="text-center">
-          <h3 className="text-lg font-semibold text-foreground mb-2">
+          <h3 className="text-lg font-semibold text-zinc-100 mb-2">
             Rate this model
           </h3>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-zinc-400 mb-4">
             How satisfied are you with the generated 3D model?
           </p>
 
@@ -104,8 +104,8 @@ export default function ModelRating({
                   <svg
                     className={`w-8 h-8 transition-colors duration-200 ${
                       isFilled
-                        ? 'text-yellow-400 hover:text-yellow-500'
-                        : 'text-gray-300 hover:text-yellow-300'
+                        ? 'text-amber-400 hover:text-amber-300'
+                        : 'text-zinc-600 hover:text-amber-500/50'
                     }`}
                     fill="currentColor"
                     viewBox="0 0 20 20"
@@ -121,7 +121,7 @@ export default function ModelRating({
           {/* Rating Labels */}
           {(hoveredRating || rating) > 0 && (
             <div className="mb-4">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-zinc-200">
                 {hoveredRating || rating === 1 && '⭐ Poor'}
                 {hoveredRating || rating === 2 && '⭐⭐ Fair'}
                 {hoveredRating || rating === 3 && '⭐⭐⭐ Good'}
@@ -137,14 +137,14 @@ export default function ModelRating({
               variant="outline"
               onClick={handleSkip}
               disabled={isSubmitting}
-              className="flex-1"
+              className="flex-1 border-zinc-600 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
             >
               Skip
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={rating === 0 || isSubmitting}
-              className="flex-1"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
             >
               {isSubmitting ? (
                 <div className="flex items-center space-x-2">
