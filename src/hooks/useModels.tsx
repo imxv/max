@@ -32,7 +32,7 @@ interface UseModelsReturn {
     creditsCost: number;
     status?: ModelStatus;
   }) => Promise<GeneratedModel | null>;
-  updateModelRating: (modelId: string, rating: number) => Promise<boolean>;
+  updateModelRating: (modelId: string, rating: number, comment?: string) => Promise<boolean>;
   deleteModel: (modelId: string) => Promise<boolean>;
   total: number;
 }
@@ -156,7 +156,7 @@ export function useModels(): UseModelsReturn {
     }
   }, []);
 
-  const updateModelRating = useCallback(async (modelId: string, rating: number): Promise<boolean> => {
+  const updateModelRating = useCallback(async (modelId: string, rating: number, comment?: string): Promise<boolean> => {
     setError(null);
 
     try {
@@ -165,7 +165,7 @@ export function useModels(): UseModelsReturn {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ rating }),
+        body: JSON.stringify({ rating, comment }),
       });
 
       if (!response.ok) {

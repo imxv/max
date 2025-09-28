@@ -180,11 +180,11 @@ export default function ModelGenerator() {
   };
 
   // Handle rating submission
-  const handleRatingSubmit = async (rating: number) => {
+  const handleRatingSubmit = async (rating: number, comment?: string) => {
     if (!ratingModelId) return;
 
     try {
-      const success = await updateModelRating(ratingModelId, rating);
+      const success = await updateModelRating(ratingModelId, rating, comment);
       if (success) {
         // Update the selected model if it matches the rated model
         if (selectedModel?.id === ratingModelId) {

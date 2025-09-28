@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 
 interface ModelRatingProps {
   modelId: string;
   currentRating?: number | null;
-  onRatingSubmit: (rating: number) => Promise<void>;
+  onRatingSubmit: (rating: number, comment?: string) => Promise<void>;
   onClose?: () => void;
 }
 
@@ -21,6 +22,17 @@ export default function ModelRating({
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [comment, setComment] = useState<string>('');
+
+  // 预设评价选项
+  const presetComments = [
+    '网格破损',
+    '纹理模糊',
+    '与描述不符',
+    '尺寸比例不对',
+    '缺少细节',
+    '颜色不准确'
+  ];
 
   const handleStarClick = (starRating: number) => {
     setRating(starRating);
@@ -34,12 +46,23 @@ export default function ModelRating({
     setHoveredRating(0);
   };
 
+  const handlePresetComment = (presetComment: string) => {
+    if (comment.includes(presetComment)) {
+      // 如果已存在，移除该评价
+      setComment(comment.replace(presetComment, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim());
+    } else {
+      // 如果不存在，添加该评价
+      const newComment = comment ? `${comment}, ${presetComment}` : presetComment;
+      setComment(newComment);
+    }
+  };
+
   const handleSubmit = async () => {
     if (rating === 0) return;
 
     setIsSubmitting(true);
     try {
-      await onRatingSubmit(rating);
+      await onRatingSubmit(rating, comment.trim() || undefined);
       setIsSubmitted(true);
 
       // Auto-close after 2 seconds
@@ -130,6 +153,44 @@ export default function ModelRating({
               </p>
             </div>
           )}
+
+          {/* Comment Section */}
+          <div className="mb-6 text-left">
+            <label className="block text-sm font-medium text-zinc-200 mb-2">
+              评价反馈 (可选)
+            </label>
+
+            {/* Preset Comment Buttons */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {presetComments.map((preset) => (
+                <Button
+                  key={preset}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePresetComment(preset)}
+                  disabled={isSubmitting}
+                  className={`text-xs transition-colors ${
+                    comment.includes(preset)
+                      ? 'bg-amber-600 border-amber-600 text-white hover:bg-amber-700'
+                      : 'border-zinc-600 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
+                  }`}
+                >
+                  {preset}
+                </Button>
+              ))}
+            </div>
+
+            {/* Comment Textarea */}
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="请描述具体问题或建议..."
+              disabled={isSubmitting}
+              className="bg-zinc-800 border-zinc-600 text-zinc-100 placeholder-zinc-400 focus:border-amber-500 focus:ring-amber-500/20 resize-none"
+              rows={3}
+            />
+          </div>
 
           {/* Action Buttons */}
           <div className="flex space-x-3">

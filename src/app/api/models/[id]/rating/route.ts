@@ -13,7 +13,7 @@ export async function PUT(
     }
 
     const { id: modelId } = await params;
-    const { rating } = await request.json();
+    const { rating, comment } = await request.json();
 
     // Validate rating value
     if (!rating || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
@@ -38,13 +38,14 @@ export async function PUT(
       );
     }
 
-    // Update the model with the rating
+    // Update the model with the rating and comment
     const updatedModel = await prisma.generatedModel.update({
       where: {
         id: modelId,
       },
       data: {
         rating: rating,
+        comment: comment || null,
         updatedAt: new Date(),
       },
     });
@@ -52,7 +53,8 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       rating: updatedModel.rating,
-      message: 'Rating saved successfully'
+      comment: updatedModel.comment,
+      message: 'Rating and comment saved successfully'
     });
 
   } catch (error) {
