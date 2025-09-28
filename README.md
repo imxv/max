@@ -165,3 +165,9 @@
 - 代理下载：`src/app/api/proxy-model/route.ts`
 - 积分体系：`src/lib/credits.ts`、`src/app/api/credits/**`
 - 数据模型：`prisma/schema.prisma`
+
+# 视频演示Demo
+https://photo.459122.xyz/i/f7e0c1292c73c0d105f7bc3cb9ffc9b0.mp4
+
+
+
